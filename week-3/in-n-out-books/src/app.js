@@ -11,7 +11,6 @@ const app = express();
 // Set the port for the server
 const PORT = 3000;
 
-
 app.get('/', (req, res) => {
   const html = `
     <!DOCTYPE html>
@@ -111,18 +110,19 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
+// Handle 404 errors
 app.use((req, res, next) => {
   res.status(404).send('404: Page Not Found');
 });
 
+// Handle other errors
 app.use((err, req, res, next) => {
   const errorResponse = {
-      message: err.message,
-      // Include the stack trace in development mode
-      stack: process.env.NODE_ENV === 'development' ? err.stack : {}
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : {}
   };
   res.status(500).json(errorResponse);
 });
 
+// Export the app for use in other files (e.g., test)
 module.exports = app;
-
