@@ -2,16 +2,16 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const Ajv = require("ajv"); // Add AJV for validation
+const Ajv = require("ajv");
 const users = require("./database/users");
-const Collection = require("./database/collection");
+const Collection = require("./database/collection"); // Note: Unused in current routes
 const booksDB = require("./database/books");
 
 const app = express();
 app.use(bodyParser.json());
 
 const saltRounds = 10;
-const SECRET_KEY = "your_secret_key";
+const SECRET_KEY = process.env.SECRET_KEY || "your_secret_key"; // For future JWT use
 
 // AJV setup for security question validation
 const ajv = new Ajv({ allErrors: true });
@@ -25,10 +25,11 @@ const securityQuestionSchema = {
     required: ["answer"],
     additionalProperties: false,
   },
-  minItems: 3, // Match the number of security questions in users.js
+  minItems: 3,
   maxItems: 3,
 };
 
+// Book Routes
 app.post("/api/books", async (req, res) => {
   try {
     const { title, author } = req.body;
@@ -37,7 +38,7 @@ app.post("/api/books", async (req, res) => {
     }
 
     const result = await booksDB.insertOne({ title, author });
-    const newBook = result.ops[0];
+    const newBook = result.ops ? result.ops[0] : result; // Handle mock vs real DB
     res.status(201).json(newBook);
   } catch (error) {
     console.error("Error adding book:", error);
@@ -93,30 +94,32 @@ app.delete("/api/books/:id", async (req, res) => {
   }
 });
 
+// User Routes
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     console.log("Incoming login request:", req.body);
 
     if (!email || !password) {
-      throw Object.assign(new Error("Bad Request"), { status: 400 });
+      return res.status(400).json({ message: "Email and password are required" });
     }
 
     const user = await users.findOne({ email });
     if (!user) {
-      throw Object.assign(new Error("Unauthorized"), { status: 401 });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const passwordMatch = bcrypt.compareSync(password, user.password);
     if (!passwordMatch) {
       console.log("Incorrect password for email:", email);
-      throw Object.assign(new Error("Unauthorized"), { status: 401 });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     console.log("Authentication successful");
-    res.status(200).send("Authentication successful");
+    res.status(200).json({ message: "Authentication successful" }); // JSON response
   } catch (error) {
-    res.status(error.status || 500).send(error.message);
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
@@ -125,22 +128,19 @@ app.post("/api/users/:email/verify-security-question", async (req, res) => {
     const { email } = req.params;
     const answers = req.body;
 
-    // Validate request body with AJV
     const validate = ajv.compile(securityQuestionSchema);
     if (!validate(answers)) {
-      throw Object.assign(new Error("Bad Request"), { status: 400 });
+      return res.status(400).json({ message: "Invalid security question answers" });
     }
 
-    // Find user
     const user = await users.findOne({ email });
     if (!user) {
-      throw Object.assign(new Error("Unauthorized"), { status: 401 });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // Compare answers
     const savedQuestions = user.securityQuestions;
     if (answers.length !== savedQuestions.length) {
-      throw Object.assign(new Error("Unauthorized"), { status: 401 });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const allMatch = answers.every((answerObj, index) => {
@@ -149,14 +149,20 @@ app.post("/api/users/:email/verify-security-question", async (req, res) => {
 
     if (!allMatch) {
       console.log("Security answers do not match for email:", email);
-      throw Object.assign(new Error("Unauthorized"), { status: 401 });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     console.log("Security questions verified for email:", email);
-    res.status(200).send("Security questions successfully answered");
+    res.status(200).json({ message: "Security questions successfully answered" });
   } catch (error) {
-    res.status(error.status || 500).send(error.message);
+    console.error("Security question error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
+});
+
+// Default Route (for landing page)
+app.get("/", (req, res) => {
+  res.json({ message: "Welcome to the In-N-Out Books API" });
 });
 
 const PORT = process.env.PORT || 3000;

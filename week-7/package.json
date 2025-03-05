@@ -20,5 +20,9 @@
   },
   "jest": {
     "testEnvironment": "node"
+  },
+  "engines": {
+    "node": "20.9.0",
+    "npm": "10.1.0"
   }
 }
